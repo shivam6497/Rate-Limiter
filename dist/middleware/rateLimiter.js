@@ -1,36 +1,36 @@
 import redis from "../redis/client.js";
-const WINDOW_SIZE_IN_SECONDS = 60;
-const MAX_REQUESTS = 10;
-const rateLimiter = async (req, res, next) => {
-    try {
-        const ip = req.ip || req.socket.remoteAddress || "unknown";
-        const normalizedIp = ip === "::1" ? "127.0.0.1" : ip;
-        const key = `rate_limit:${normalizedIp}`;
-        console.log("KEY BEING SET:", key);
-        const requests = await redis.incr(key);
-        if (requests === 1) {
-            await redis.expire(key, WINDOW_SIZE_IN_SECONDS);
+const WISHLIST = [];
+const rateLimiter = (options, name) => {
+    return async (req, res, next) => {
+        const ip = req.ip;
+        const normalizeIp = ip === "::1" ? "127.0.0.1" : ip;
+        if (WISHLIST.includes(normalizeIp)) {
+            console.log(`IP ${normalizeIp} is whitelisted. Skipping rate limiting.`);
+            next();
+            return;
         }
-        if (requests > MAX_REQUESTS) {
+        const key = `rate_limit:${name}:${normalizeIp}`;
+        const requests = await redis.incr(key);
+        if (requests == 1) {
+            await redis.expire(key, options.windowInSeconds);
+        }
+        const ttl = await redis.ttl(key);
+        res.setHeader("X-RateLimit-Limit", options.maxRequests.toString());
+        res.setHeader("X-RateLimit-Remaining", Math.max(options.maxRequests - requests, 0).toString());
+        res.setHeader("X-RateLimit-Reset", (Date.now() + ttl * 1000).toString());
+        res.setHeader("Retry-After", ttl);
+        if (requests > options.maxRequests) {
             res.status(429).json({
                 success: false,
                 message: "Too many requests. Please try again later.",
+                retryAfter: ttl,
                 requestMade: requests,
-                limit: MAX_REQUESTS,
+                limit: options.maxRequests,
             });
             return;
         }
-        res.setHeader("X-RateLimit-Limit", MAX_REQUESTS.toString());
-        res.setHeader("X-RateLimit-Remaining", (MAX_REQUESTS - requests).toString());
         next();
-    }
-    catch (err) {
-        console.error("Rate limiter error:", err);
-        res.status(500).json({
-            success: false,
-            message: "Internal server error in rate limiter.",
-        });
-    }
+    };
 };
 export default rateLimiter;
 //# sourceMappingURL=rateLimiter.js.map
