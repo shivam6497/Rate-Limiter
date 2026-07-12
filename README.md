@@ -6,6 +6,7 @@ A small Express + TypeScript API that demonstrates Redis-backed rate limiting.
 
 - Uses Redis to track request counts per IP address.
 - Applies a global rate limiter to all routes.
+- Using Sliding Window Log algorithm to allow bursts of requests while enforcing a limit over time.
 - Applies a stricter limiter to `/api/data`.
 - Returns `429 Too Many Requests` when a client exceeds the configured limit.
 
